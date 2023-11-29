@@ -1,0 +1,81 @@
+stages:
+  - build
+  - codestyle
+  - tests
+  - deploy
+  - cd_telega
+
+build:
+  stage: build
+  tags:
+    - CI
+  script:
+    - make -C ./src/cat
+    - make -C ./src/grep
+  after_script:
+    - echo "1CI_JOB_STATUS - $CI_JOB_STATUS"
+  artifacts:
+      paths:
+       - ./src/cat/s21_cat
+       - ./src/grep/s21_grep
+      expire_in: 30 days
+
+style_check:
+  stage: codestyle
+  tags:
+    - CI
+  needs:
+    - job: build
+  allow_failure: false
+  script:
+    - echo "Start codestyle check"
+    - make check -C ./src/cat
+    - make check -C ./src/grep
+    - echo "Codestyle check is over"
+  after_script:
+    - echo "$CI_JOB_STATUS" > status
+    - cat status
+    - chmod +x telegram.sh
+    - ./telegram.sh "Style Check"
+    - rm status
+
+inttests:
+  stage: tests
+  tags:
+    - CI
+  allow_failure: false
+  needs:
+    - job: build
+    - job: style_check
+  script:
+    - echo "Start integration tests"
+    - make test -C ./src/cat
+    - make test -C ./src/grep
+    - echo "Test is over"
+  after_script:
+    - echo "$CI_JOB_STATUS" > status
+    - chmod +x telegram.sh
+    - ./telegram.sh "Integration tests"
+    - rm status
+
+Deploy:
+  stage: deploy
+  tags:
+    - CD
+  needs:
+    - job: build
+    - job: style_check
+    - job: inttests
+      artifacts: true
+  when: manual
+  allow_failure: false
+  script:
+    - echo "Start deploy"
+    - chmod +x ./deploy.sh
+    - ./deploy.sh
+    - echo "Deploy os over"
+  after_script:
+    - echo "$CI_JOB_STATUS" > status
+    - chmod +x telegram.sh
+    - ./telegram.sh "Deploy"
+    - rm status  
